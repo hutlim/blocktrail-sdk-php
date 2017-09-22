@@ -354,7 +354,7 @@ abstract class Wallet implements WalletInterface {
             $blocktrailPublicKey->buildKey($path)->publicKey()
         ]), false);
 
-        if ($path[2] === 2) {
+        if ($this->network !== "bitcoincash" && $path[2] === 2) {
             $witnessScript = new WitnessScript($multisig);
             $redeemScript = new P2shScript($witnessScript);
             $scriptPubKey = $redeemScript->getOutputScript();

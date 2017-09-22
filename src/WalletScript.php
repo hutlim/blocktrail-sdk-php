@@ -130,6 +130,7 @@ class WalletScript
     }
 
     /**
+     * @param int $scriptId
      * @param ScriptInterface $script
      * @param P2shScript|null $redeemScript
      * @param WitnessScript|null $witnessScript
