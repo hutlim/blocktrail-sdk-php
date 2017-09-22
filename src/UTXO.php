@@ -27,7 +27,12 @@ class UTXO {
      */
     public $redeemScript;
 
-    public function __construct($hash, $index, $value = null, AddressInterface $address = null, ScriptInterface $scriptPubKey = null, $path = null, ScriptInterface $redeemScript = null) {
+    /**
+     * @var null
+     */
+    public $witnessScript;
+
+    public function __construct($hash, $index, $value = null, AddressInterface $address = null, ScriptInterface $scriptPubKey = null, $path = null, ScriptInterface $redeemScript = null, ScriptInterface $witnessScript = null) {
         $this->hash = $hash;
         $this->index = $index;
         $this->value = $value;
@@ -35,5 +40,6 @@ class UTXO {
         $this->scriptPubKey = $scriptPubKey;
         $this->path = $path;
         $this->redeemScript = $redeemScript;
+        $this->witnessScript = $witnessScript;
     }
 }

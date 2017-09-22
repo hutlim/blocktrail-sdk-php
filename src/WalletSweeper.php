@@ -8,6 +8,7 @@ use BitWasp\Bitcoin\Key\Deterministic\HierarchicalKeyFactory;
 use BitWasp\Bitcoin\Network\NetworkFactory;
 use BitWasp\Bitcoin\Script\P2shScript;
 use BitWasp\Bitcoin\Script\ScriptFactory;
+use BitWasp\Bitcoin\Script\WitnessScript;
 use BitWasp\Bitcoin\Transaction\Factory\SignData;
 use BitWasp\Bitcoin\Transaction\Factory\Signer;
 use BitWasp\Bitcoin\Transaction\Factory\TxBuilder;
@@ -156,13 +157,23 @@ abstract class WalletSweeper {
     protected function createAddress($path) {
         $path = BIP32Path::path($path)->publicPath();
 
-        $redeemScript = ScriptFactory::scriptPubKey()->multisig(2, BlocktrailSDK::sortMultisigKeys([
+        $multisig = ScriptFactory::scriptPubKey()->multisig(2, BlocktrailSDK::sortMultisigKeys([
             $this->primaryPrivateKey->buildKey($path)->publicKey(),
             $this->backupPrivateKey->buildKey($path->unhardenedPath())->publicKey(),
             $this->getBlocktrailPublicKey($path)->buildKey($path)->publicKey()
         ]), false);
 
-        return [(new P2shScript($redeemScript))->getAddress()->getAddress(), $redeemScript];
+        if ($this->network !== "bitcoincash" && (int) $path[2] === 2) {
+            $witnessScript = new WitnessScript($multisig);
+            $redeemScript = new P2shScript($witnessScript);
+            $address = $redeemScript->getAddress()->getAddress();
+        } else {
+            $witnessScript = null;
+            $redeemScript = new P2shScript($multisig);
+            $address = $redeemScript->getAddress()->getAddress();
+        }
+
+        return [$address, $redeemScript, $witnessScript];
     }
 
     /**
@@ -179,10 +190,11 @@ abstract class WalletSweeper {
         for ($i = 0; $i < $count; $i++) {
             //create a path subsequent address
             $path = (string)WalletPath::create($keyIndex, $_chain = 0, $start+$i)->path()->publicPath();
-            list($address, $redeem) = $this->createAddress($path);
+            list($address, $redeem, $witness) = $this->createAddress($path);
             $addresses[$address] = array(
                 //'address' => $address,
                 'redeem' => $redeem,
+                'witness' => $witness,
                 'path' => $path
             );
 
@@ -256,6 +268,7 @@ abstract class WalletSweeper {
                         $addressUTXOs[$address] = [
                             'path' =>  $addresses[$address]['path'],
                             'redeem' =>  $addresses[$address]['redeem'],
+                            'witness' =>  $addresses[$address]['witness'],
                             'utxos' =>  [],
                         ];
                     }
@@ -332,11 +345,12 @@ abstract class WalletSweeper {
                     AddressFactory::fromString($address),
                     ScriptFactory::fromHex($utxo['script_hex']),
                     $data['path'],
-                    $data['redeem']
+                    $data['redeem'],
+                    $data['witness']
                 );
 
                 $utxos[] = $utxo;
-                $signInfo[] = new SignInfo($utxo->path, $utxo->redeemScript, new TransactionOutput($utxo->value, $utxo->scriptPubKey));
+                $signInfo[] = new SignInfo($utxo->path, $utxo->redeemScript, $utxo->witnessScript, new TransactionOutput($utxo->value, $utxo->scriptPubKey));
             }
         }
 

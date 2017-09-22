@@ -15,14 +15,19 @@ class SignInfo {
     public $redeemScript;
 
     /**
+     * @var ScriptInterface
+     */
+    public $witnessScript;
+
+    /**
      * @var TransactionOutput
      */
     public $output;
 
-
-    public function __construct($path, ScriptInterface $redeemScript, TransactionOutput $output) {
+    public function __construct($path, ScriptInterface $redeemScript, ScriptInterface $witnessScript = null, TransactionOutput $output) {
         $this->path = $path;
         $this->redeemScript = $redeemScript;
+        $this->witnessScript = $witnessScript;
         $this->output = $output;
     }
 }
