@@ -9,7 +9,6 @@ use BitWasp\Bitcoin\MessageSigner\MessageSigner;
 use BitWasp\Bitcoin\Script\P2shScript;
 use BitWasp\Bitcoin\Script\ScriptFactory;
 use BitWasp\Bitcoin\Script\ScriptInterface;
-use BitWasp\Bitcoin\Script\WitnessProgram;
 use BitWasp\Bitcoin\Script\WitnessScript;
 use BitWasp\Bitcoin\Transaction\Factory\SignData;
 use BitWasp\Bitcoin\Transaction\Factory\Signer;
@@ -603,9 +602,10 @@ abstract class Wallet implements WalletInterface {
                 $utxo->path = $this->getPathForAddress($utxo->address->getAddress());
             }
 
-            if (!$utxo->redeemScript) {
-                list(, $redeemScript) = $this->getRedeemScriptByPath($utxo->path);
+            if (!$utxo->redeemScript || !$utxo->witnessScript) {
+                list(, $redeemScript, $witnessScript) = $this->getRedeemScriptByPath($utxo->path);
                 $utxo->redeemScript = $redeemScript;
+                $utxo->witnessScript = $witnessScript;
             }
 
             $signInfo[] = new SignInfo($utxo->path, $utxo->redeemScript, $utxo->witnessScript, new TransactionOutput($utxo->value, $utxo->scriptPubKey));
