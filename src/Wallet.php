@@ -151,7 +151,7 @@ abstract class Wallet implements WalletInterface {
 
         $this->identifier = $identifier;
         $this->backupPublicKey = BlocktrailSDK::normalizeBIP32Key($backupPublicKey);
-        $this->primaryPublicKeys = BlocktrailSDK::normalizeBIP32KeyArray($primaryPublicKeys);
+        $this->primaryPublicKeys = BlocktrailSDK::normalizeBIP32KeyArray($primaryPublicKeys);;
         $this->blocktrailPublicKeys = BlocktrailSDK::normalizeBIP32KeyArray($blocktrailPublicKeys);
 
         $this->network = $network;
@@ -750,9 +750,14 @@ abstract class Wallet implements WalletInterface {
 
         // sign the transaction with our keys
         $signed = $this->signTransaction($tx, $signInfo);
-        
+
+        $txs = [
+            'signed_transaction' => $signed->getHex(),
+            'base_transaction' => $signed->getHex(),
+        ];
+
         // send the transaction
-        $finished = $this->sendTransaction($signed->getHex(), array_map(function (SignInfo $r) {
+        $finished = $this->sendTransaction($txs, array_map(function (SignInfo $r) {
             return $r->path;
         }, $signInfo), $apiCheckFee);
 
