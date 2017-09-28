@@ -174,6 +174,7 @@ class WalletTest extends BlocktrailTestCase {
             $wallet->unlock(['password' => $passphrase]);
         }
 
+        $wallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
         return $wallet;
     }
 
@@ -300,6 +301,25 @@ class WalletTest extends BlocktrailTestCase {
      *
      * @throws \Exception
      */
+    public function testWalletSegwitTransaction()
+    {
+        $client = $this->setupBlocktrailSDK();
+
+        /** @var Wallet $wallet */
+        $wallet = $client->initWallet([
+            "identifier" => "unittest-transaction",
+            "passphrase" => "password"
+        ]);
+    }
+
+        /**
+     * this test requires / asumes that the test wallet it uses contains a balance
+     *
+     * we keep the wallet topped off with some coins,
+     * but if some funny guy ever empties it or if you use your own API key to run the test then it needs to be topped off again
+     *
+     * @throws \Exception
+     */
     public function testWalletTransaction() {
         $client = $this->setupBlocktrailSDK();
 
@@ -308,6 +328,7 @@ class WalletTest extends BlocktrailTestCase {
             "identifier" => "unittest-transaction",
             "passphrase" => "password"
         ]);
+        $wallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
 
         $this->assertEquals("unittest-transaction", $wallet->getIdentifier());
         $this->assertEquals("M/9999'", $wallet->getBlocktrailPublicKeys()[9999][1]);
@@ -418,6 +439,7 @@ class WalletTest extends BlocktrailTestCase {
             "primary_private_key" => $primaryPrivateKey,
             "primary_mnemonic" => false, // explicitly set false because we're reusing unittest-transaction which has a mnemonic stored
         ]);
+        $wallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
 
         $this->assertEquals("unittest-transaction", $wallet->getIdentifier());
         $this->assertEquals("M/9999'", $wallet->getBlocktrailPublicKeys()[9999][1]);
@@ -492,7 +514,7 @@ class WalletTest extends BlocktrailTestCase {
             "identifier" => "unittest-transaction",
             "passphrase" => "password"
         ]);
-
+        $wallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
         $transactions = $wallet->transactions(1, 23);
 
         $this->assertEquals(23, count($transactions['data']));
