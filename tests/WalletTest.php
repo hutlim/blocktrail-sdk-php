@@ -441,33 +441,33 @@ class WalletTest extends BlocktrailTestCase {
         ]);
         $this->cleanupData['wallets'][] = $segwitwallet; // store for cleanup
 
-        list ($path, $unittestAddress) = $unittestWallet->getNewAddressPair();
-        $this->assertTrue(strpos($path, "M/9999'/0/") === 0);
-        $this->assertTrue(AddressFactory::fromString($unittestAddress)->getAddress() == $unittestAddress);
+        list (, $unittestAddress) = $unittestWallet->getNewAddressPair();
 
-        $this->assertEquals(Wallet::CHAIN_BTC_SEGWIT, $segwitwallet->getChainIndex());
-        list ($swpath, $swAddr1) = $segwitwallet->getNewAddressPair();
-        $this->assertTrue(strpos($swpath, "M/9999'/2/") === 0);
-        $this->assertTrue(AddressFactory::fromString($swAddr1)->getAddress() == $swAddr1);
+        $segwitRow = [Wallet::CHAIN_BTC_SEGWIT, "M/9999'/2/"];
+        $defaultRow = [Wallet::CHAIN_BTC_DEFAULT, "M/9999'/0/"];
 
-        $this->assertEquals(Wallet::CHAIN_BTC_SEGWIT, $segwitwallet->getChainIndex());
-        list ($swpath, $swAddr2) = $segwitwallet->getNewAddressPair();
-        $this->assertTrue(strpos($swpath, "M/9999'/2/") === 0);
-        $this->assertTrue(AddressFactory::fromString($swAddr2)->getAddress() == $swAddr2);
+        $task = [$segwitRow, $segwitRow, $defaultRow];
+        $vAddr = [];
+        $origChain = $segwitwallet->getChainIndex();
+        foreach ($task as $chainDetail) {
+            list ($chainDetail, $expectedPathRoot) = $chainDetail;
 
-        $segwitwallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
-        $this->assertEquals(Wallet::CHAIN_BTC_DEFAULT, $segwitwallet->getChainIndex());
-        list ($path, $p2shAddr1) = $segwitwallet->getNewAddressPair();
-        $this->assertTrue(strpos($path, "M/9999'/0/") === 0);
-        $this->assertTrue(AddressFactory::fromString($p2shAddr1)->getAddress() == $p2shAddr1);
-        $segwitwallet->setChainIndex(Wallet::CHAIN_BTC_SEGWIT);
+            $segwitwallet->setChainIndex($chainDetail);
+            $this->assertEquals($chainDetail, $segwitwallet->getChainIndex());
+
+            list ($path, $address) = $segwitwallet->getNewAddressPair();
+            $this->assertTrue(strpos($path, $expectedPathRoot) === 0);
+
+            $vAddr[] = $address;
+        }
+        $segwitwallet->setChainIndex($origChain);
 
         $value = BlocktrailSDK::toSatoshi(0.0002);
 
         $fundTxHash = [];
         $fundTx = [];
         $fundTxOutIdx = [];
-        foreach ([$swAddr1, $swAddr2, $p2shAddr1] as $i => $addr) {
+        foreach ($vAddr as $i => $addr) {
             // Fund segwit address 1
             $fundTxHash[$i] = $unittestWallet->pay([$addr => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
 
@@ -509,8 +509,6 @@ class WalletTest extends BlocktrailTestCase {
         $spendTxHash = $segwitwallet->sendTx($builder);
         $spendTx = $this->getTx($client, $spendTxHash);
         $this->assertEquals($spendTxHash, $spendTx['hash']);
-
-        $this->assertTrue($segwitwallet->deleteWallet(true));
     }
 
     /**
