@@ -335,11 +335,14 @@ class WalletTest extends BlocktrailTestCase {
 
         $this->assertEquals(Wallet::CHAIN_BTC_SEGWIT, $segwitwallet->getChainIndex());
         list ($swpath, $segwitAddress) = $segwitwallet->getNewAddressPair();
+        $addrObj = AddressFactory::fromString($segwitAddress);
         $this->assertTrue(strpos($swpath, "M/9999'/2/") === 0);
-        $this->assertTrue(AddressFactory::fromString($segwitAddress)->getAddress() == $segwitAddress);
+        $this->assertTrue($addrObj->getAddress() == $segwitAddress);
 
         $segwitScript = $segwitwallet->getWalletScriptByPath($swpath);
         $this->assertEquals($segwitScript->getAddress()->getAddress(), $segwitAddress);
+        $this->assertTrue($segwitScript->isP2SH());
+        $this->assertTrue($segwitScript->isP2WSH());
 
         // Fund segwit address
         $value = BlocktrailSDK::toSatoshi(0.0002);
@@ -363,14 +366,59 @@ class WalletTest extends BlocktrailTestCase {
         $this->assertEquals($fundTxHash, $builder->getUtxos()[0]->hash);
         $this->assertEquals($value, $builder->getUtxos()[0]->value);
 
+        $this->assertEquals(1, count($builder->getOutputs()));
+
         $spendTxHash = $segwitwallet->sendTx($builder);
         $spendTx = $this->getTx($client, $spendTxHash);
         $this->assertEquals($spendTxHash, $spendTx['hash']);
         $this->assertEquals(ScriptFactory::sequence([$segwitScript->getRedeemScript()->getBuffer()])->getHex(), $spendTx['inputs'][0]['script_signature']);
 
         $this->assertTrue($segwitwallet->deleteWallet(true));
+    }
 
+    /**
+     * this test requires / asumes that the test wallet it uses contains a balance
+     *
+     * we keep the wallet topped off with some coins,
+     * but if some funny guy ever empties it or if you use your own API key to run the test then it needs to be topped off again
+     *
+     * @throws \Exception
+     */
+    public function testSendToBech32()
+    {
+        $client = $this->setupBlocktrailSDK();
 
+        $unittestWallet = $client->initWallet([
+            "identifier" => "unittest-transaction",
+            "passphrase" => "password"
+        ]);
+        $unittestWallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
+
+        $bech32Addr = 'tb1qt4hs9aracmzhpy7ly3hrwsk0u83z4dqs44wln8';
+        $pubKeyHash = '5d6f02f47dc6c57093df246e3742cfe1e22ab410';
+        $wp = ScriptFactory::scriptPubKey()->p2wkh(Buffer::hex($pubKeyHash))->getHex();
+
+        $builder = (new TransactionBuilder())
+            ->addRecipient($bech32Addr, BlocktrailSDK::toSatoshi(0.0001))
+            ->setFeeStrategy(Wallet::FEE_STRATEGY_BASE_FEE);
+
+        $builder = $unittestWallet->coinSelectionForTxBuilder($builder, false, true);
+        $this->assertTrue(count($builder->getUtxos()) > 0);
+        $this->assertTrue(count($builder->getOutputs()) <= 2);
+
+        $spendTxHash = $unittestWallet->sendTx($builder);
+        $spendTx = $this->getTx($client, $spendTxHash);
+        $this->assertEquals($spendTxHash, $spendTx['hash']);
+
+        $found = false;
+        foreach ($spendTx['outputs'] as $output) {
+            if ($output['script_hex'] == $wp) {
+                $found = true;
+                $this->assertEquals(BlocktrailSDK::toSatoshi(0.0001), $output['value']);
+            }
+        }
+
+        $this->assertTrue($found, 'should find the address with our output script');
     }
 
     /**
