@@ -429,6 +429,101 @@ class WalletTest extends BlocktrailTestCase {
      *
      * @throws \Exception
      */
+    public function testSpendMixedUtxoTypes()
+    {
+        $client = $this->setupBlocktrailSDK();
+
+        $unittestWallet = $client->initWallet([
+            "identifier" => "unittest-transaction",
+            "passphrase" => "password"
+        ]);
+        $unittestWallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
+
+        $identifier = $this->getRandomTestIdentifier();
+
+        /** @var Wallet $unittestWallet */
+        /** @var Wallet $segwitwallet */
+        try {
+            list ($segwitwallet) = $client->createNewWallet([
+                'key_index' => 9999,
+                "identifier" => $identifier,
+                "passphrase" => "password"
+            ]);
+        } catch (\Exception $e) {
+            $segwitwallet = $client->initWallet([
+                "identifier" => $identifier,
+                "passphrase" => "password"
+            ]);
+        }
+
+        list ($path, $unittestAddress) = $unittestWallet->getNewAddressPair();
+        $this->assertTrue(strpos($path, "M/9999'/0/") === 0);
+        $this->assertTrue(AddressFactory::fromString($unittestAddress)->getAddress() == $unittestAddress);
+
+        $this->assertEquals(Wallet::CHAIN_BTC_SEGWIT, $segwitwallet->getChainIndex());
+        list ($swpath, $swAddr1) = $segwitwallet->getNewAddressPair();
+        $this->assertTrue(strpos($swpath, "M/9999'/2/") === 0);
+        $this->assertTrue(AddressFactory::fromString($swAddr1)->getAddress() == $swAddr1);
+
+        $this->assertEquals(Wallet::CHAIN_BTC_SEGWIT, $segwitwallet->getChainIndex());
+        list ($swpath, $swAddr2) = $segwitwallet->getNewAddressPair();
+        $this->assertTrue(strpos($swpath, "M/9999'/2/") === 0);
+        $this->assertTrue(AddressFactory::fromString($swAddr2)->getAddress() == $swAddr2);
+
+        $segwitwallet->setChainIndex(Wallet::CHAIN_BTC_DEFAULT);
+        $this->assertEquals(Wallet::CHAIN_BTC_DEFAULT, $segwitwallet->getChainIndex());
+        list ($path, $p2shAddr1) = $segwitwallet->getNewAddressPair();
+        $this->assertTrue(strpos($path, "M/9999'/0/") === 0);
+        $this->assertTrue(AddressFactory::fromString($p2shAddr1)->getAddress() == $p2shAddr1);
+        $segwitwallet->setChainIndex(Wallet::CHAIN_BTC_SEGWIT);
+
+        $value = BlocktrailSDK::toSatoshi(0.0002);
+
+        // Fund segwit address 1
+        $fundTxHash1 = $unittestWallet->pay([$swAddr1 => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
+
+        $this->assertTrue(!!$fundTxHash1);
+        $fundTx1 = $this->getTx($client, $fundTxHash1);
+        $this->assertEquals($fundTxHash1, $fundTx1['hash']);
+
+        // Fund segwit address 2
+        $fundTxHash2 = $unittestWallet->pay([$swAddr2 => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
+
+        $this->assertTrue(!!$fundTxHash2);
+        $fundTx2 = $this->getTx($client, $fundTxHash2);
+        $this->assertEquals($fundTxHash2, $fundTx2['hash']);
+
+        // Fund p2sh address 1
+        $fundTxHash3 = $unittestWallet->pay([$p2shAddr1 => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
+
+        $this->assertTrue(!!$fundTxHash3);
+        $fundTx3 = $this->getTx($client, $fundTxHash3);
+        $this->assertEquals($fundTxHash3, $fundTx3['hash']);
+
+        // Send back to unittest-wallet
+
+        $builder = (new TransactionBuilder())
+            ->addRecipient($unittestAddress, BlocktrailSDK::toSatoshi(0.0005))
+            ->setFeeStrategy(Wallet::FEE_STRATEGY_BASE_FEE);
+
+        $builder = $segwitwallet->coinSelectionForTxBuilder($builder, false, true);
+        $this->assertTrue(count($builder->getUtxos()) === 3);
+
+        $spendTxHash = $segwitwallet->sendTx($builder);
+        $spendTx = $this->getTx($client, $spendTxHash);
+        $this->assertEquals($spendTxHash, $spendTx['hash']);
+
+        $this->assertTrue($segwitwallet->deleteWallet(true));
+    }
+
+    /**
+     * this test requires / asumes that the test wallet it uses contains a balance
+     *
+     * we keep the wallet topped off with some coins,
+     * but if some funny guy ever empties it or if you use your own API key to run the test then it needs to be topped off again
+     *
+     * @throws \Exception
+     */
     public function testWalletTransaction() {
         $client = $this->setupBlocktrailSDK();
 
