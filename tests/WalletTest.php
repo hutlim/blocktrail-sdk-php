@@ -314,20 +314,13 @@ class WalletTest extends BlocktrailTestCase {
 
         $identifier = $this->getRandomTestIdentifier();
 
-        /** @var Wallet $unittestWallet */
         /** @var Wallet $segwitwallet */
-        try {
-            list ($segwitwallet) = $client->createNewWallet([
-                'key_index' => 9999,
-                "identifier" => $identifier,
-                "passphrase" => "password"
-            ]);
-        } catch (\Exception $e) {
-            $segwitwallet = $client->initWallet([
-                "identifier" => $identifier,
-                "passphrase" => "password"
-            ]);
-        }
+        list ($segwitwallet) = $client->createNewWallet([
+            'key_index' => 9999,
+            "identifier" => $identifier,
+            "passphrase" => "password"
+        ]);
+        $this->cleanupData['wallets'][] = $segwitwallet; // store for cleanup
 
         list ($path, $unittestAddress) = $unittestWallet->getNewAddressPair();
         $this->assertTrue(strpos($path, "M/9999'/0/") === 0);
@@ -372,8 +365,6 @@ class WalletTest extends BlocktrailTestCase {
         $spendTx = $this->getTx($client, $spendTxHash);
         $this->assertEquals($spendTxHash, $spendTx['hash']);
         $this->assertEquals(ScriptFactory::sequence([$segwitScript->getRedeemScript()->getBuffer()])->getHex(), $spendTx['inputs'][0]['script_signature']);
-
-        $this->assertTrue($segwitwallet->deleteWallet(true));
     }
 
     /**
@@ -443,18 +434,12 @@ class WalletTest extends BlocktrailTestCase {
 
         /** @var Wallet $unittestWallet */
         /** @var Wallet $segwitwallet */
-        try {
-            list ($segwitwallet) = $client->createNewWallet([
-                'key_index' => 9999,
-                "identifier" => $identifier,
-                "passphrase" => "password"
-            ]);
-        } catch (\Exception $e) {
-            $segwitwallet = $client->initWallet([
-                "identifier" => $identifier,
-                "passphrase" => "password"
-            ]);
-        }
+        list ($segwitwallet) = $client->createNewWallet([
+            'key_index' => 9999,
+            "identifier" => $identifier,
+            "passphrase" => "password"
+        ]);
+        $this->cleanupData['wallets'][] = $segwitwallet; // store for cleanup
 
         list ($path, $unittestAddress) = $unittestWallet->getNewAddressPair();
         $this->assertTrue(strpos($path, "M/9999'/0/") === 0);
@@ -479,26 +464,26 @@ class WalletTest extends BlocktrailTestCase {
 
         $value = BlocktrailSDK::toSatoshi(0.0002);
 
-        // Fund segwit address 1
-        $fundTxHash1 = $unittestWallet->pay([$swAddr1 => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
+        $fundTxHash = [];
+        $fundTx = [];
+        $fundTxOutIdx = [];
+        foreach ([$swAddr1, $swAddr2, $p2shAddr1] as $i => $addr) {
+            // Fund segwit address 1
+            $fundTxHash[$i] = $unittestWallet->pay([$addr => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
 
-        $this->assertTrue(!!$fundTxHash1);
-        $fundTx1 = $this->getTx($client, $fundTxHash1);
-        $this->assertEquals($fundTxHash1, $fundTx1['hash']);
+            $this->assertTrue(!!$fundTxHash[$i]);
+            $fundTx[$i] = $this->getTx($client, $fundTxHash[$i]);
+            $this->assertEquals($fundTxHash[$i], $fundTx[$i]['hash']);
 
-        // Fund segwit address 2
-        $fundTxHash2 = $unittestWallet->pay([$swAddr2 => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
-
-        $this->assertTrue(!!$fundTxHash2);
-        $fundTx2 = $this->getTx($client, $fundTxHash2);
-        $this->assertEquals($fundTxHash2, $fundTx2['hash']);
-
-        // Fund p2sh address 1
-        $fundTxHash3 = $unittestWallet->pay([$p2shAddr1 => $value,], null, false, true, Wallet::FEE_STRATEGY_BASE_FEE);
-
-        $this->assertTrue(!!$fundTxHash3);
-        $fundTx3 = $this->getTx($client, $fundTxHash3);
-        $this->assertEquals($fundTxHash3, $fundTx3['hash']);
+            $outIdx = -1;
+            foreach ($fundTx[$i]['outputs'] as $j => $output) {
+                if ($output['address'] == $addr) {
+                    $outIdx = $j;
+                }
+            }
+            $this->assertNotEquals(-1, $outIdx, "should find the output we created");
+            $fundTxOutIdx[$i] = $outIdx;
+        }
 
         // Send back to unittest-wallet
 
@@ -507,7 +492,19 @@ class WalletTest extends BlocktrailTestCase {
             ->setFeeStrategy(Wallet::FEE_STRATEGY_BASE_FEE);
 
         $builder = $segwitwallet->coinSelectionForTxBuilder($builder, false, true);
-        $this->assertTrue(count($builder->getUtxos()) === 3);
+        $this->assertEquals(count($fundTx), count($builder->getUtxos()));
+
+        $spendAt = [];
+        foreach ($fundTx as $i => $tx) {
+            $hash = $tx['hash'];
+            $vout = $fundTxOutIdx[$i];
+            foreach ($builder->getUtxos() as $k => $utxo) {
+                if ($utxo->hash == $hash && $utxo->index == $vout) {
+                    $spendAt[$i] = $k;
+                }
+            }
+            $this->assertTrue(array_key_exists($i, $spendAt), "should have found utxo in transaction");
+        }
 
         $spendTxHash = $segwitwallet->sendTx($builder);
         $spendTx = $this->getTx($client, $spendTxHash);
