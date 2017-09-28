@@ -177,7 +177,17 @@ abstract class Wallet implements WalletInterface {
     }
 
     /**
-     * @param null|int $chainIdx
+     * Returns the current chain index, usually
+     * indicating what type of scripts to derive.
+     * @return int
+     */
+    public function getChainIndex() {
+        return $this->walletPath->path()[2];
+    }
+
+    /**
+     * @param null $chainIdx
+     * @return $this
      */
     public function setChainIndex($chainIdx = null) {
         if (null === $chainIdx) {
@@ -267,23 +277,27 @@ abstract class Wallet implements WalletInterface {
      */
     protected function getNewDerivation() {
         $path = $this->walletPath->path()->last("*");
-
         if (self::VERIFY_NEW_DERIVATION) {
             $new = $this->sdk->_getNewDerivation($this->identifier, (string)$path);
 
             $path = $new['path'];
             $address = $new['address'];
             $redeemScript = $new['redeem_script'];
+            $witnessScript = array_key_exists('witness_script', $new) ? $new['witness_script'] : null;
 
             /** @var ScriptInterface $checkRedeemScript */
-            list($checkAddress, $checkRedeemScript) = $this->getRedeemScriptByPath($path);
-
+            /** @var ScriptInterface $checkWitnessScript */
+            list($checkAddress, $checkRedeemScript, $checkWitnessScript) = $this->getRedeemScriptByPath($path);
             if ($checkAddress != $address) {
                 throw new \Exception("Failed to verify that address from API [{$address}] matches address locally [{$checkAddress}]");
             }
 
-            if ($checkRedeemScript->getHex() != $redeemScript) {
+            if ($checkRedeemScript && $checkRedeemScript->getHex() != $redeemScript) {
                 throw new \Exception("Failed to verify that redeemScript from API [{$redeemScript}] matches address locally [{$checkRedeemScript->getHex()}]");
+            }
+
+            if ($checkWitnessScript && $checkWitnessScript->getHex() != $witnessScript) {
+                throw new \Exception("Failed to verify that witnessScript from API [{$witnessScript}] matches address locally [{$checkWitnessScript->getHex()}]");
             }
         } else {
             $path = $this->sdk->getNewDerivation($this->identifier, (string)$path);
